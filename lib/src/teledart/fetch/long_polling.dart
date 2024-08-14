@@ -17,7 +17,6 @@
  */
 
 import 'dart:core';
-import 'dart:io';
 
 import '../../telegram/telegram.dart';
 import '../../util/http_client.dart';
@@ -39,9 +38,11 @@ class LongPolling extends AbstractUpdateFetcher {
   List<String>? allowedUpdates;
 
   bool _isPolling = false;
+
   bool get isPolling => _isPolling;
 
   Duration retryDelay = Duration(seconds: 5);
+  bool doubleRetryDelayOverTime;
 
   /// Setup long polling
   ///
@@ -51,7 +52,8 @@ class LongPolling extends AbstractUpdateFetcher {
       {this.offset = 0,
       this.limit = 100,
       this.timeout = 30,
-      this.allowedUpdates}) {
+      this.allowedUpdates,
+      this.doubleRetryDelayOverTime = true}) {
     if (limit > 100 || limit < 1) {
       throw LongPollingException('Limit must between 1 and 100.');
     }
@@ -120,23 +122,27 @@ class LongPolling extends AbstractUpdateFetcher {
     }
   }
 
-  void _onRecursivePollingError(Object error) {
+  Future<void> _onRecursivePollingError(Object error) async {
     // `error` should be `Error` or `Exception` type
     print('${DateTime.now()} $error');
     print('Retrying in ${retryDelay.inSeconds} second(s)...');
-    _delayRetry();
-    _doubleRetryDelay();
+    await _delayRetry();
+    if (doubleRetryDelayOverTime) _doubleRetryDelay();
     _recursivePolling();
   }
 
   void _resetRetryDelay() => retryDelay = defaultRetryDelay;
+
   void _doubleRetryDelay() => retryDelay *= 2;
-  void _delayRetry() => sleep(retryDelay);
+
+  Future<void> _delayRetry() => Future.delayed(retryDelay);
 }
 
 class LongPollingException implements Exception {
   String cause;
+
   LongPollingException(this.cause);
+
   @override
   String toString() => 'LongPollingException: $cause';
 }
